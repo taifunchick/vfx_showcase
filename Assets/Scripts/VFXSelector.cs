@@ -1,6 +1,7 @@
 using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
+using System.Collections;
 
 public class VFXSelector : MonoBehaviour
 {
@@ -8,6 +9,10 @@ public class VFXSelector : MonoBehaviour
     public GameObject[] effectZones;
     public GameObject[] sliderGroups;
     public TextMeshProUGUI effectNameText;
+
+    public float cameraMoveSpeed = 5f;
+
+    private bool isMoving = false;
     
     private float[] effectSizes;
     
@@ -17,22 +22,17 @@ public class VFXSelector : MonoBehaviour
 
     void Start()
     {
-        sizeSliders = new Slider[sliderGroups.Length];
-        for (int i = 0; i < sliderGroups.Length; i++)
-        {
-            sizeSliders[i] = sliderGroups[i].GetComponentInChildren<Slider>();
-            if (sizeSliders[i] != null)
-            {
-                int capturedIndex = i;
-                sizeSliders[i].onValueChanged.AddListener((value) => OnSizeSliderChanged(value, capturedIndex));
-            }
-        }
-
         effectSizes = new float[] { 1f, 1f, 1f, 1f };
         
         for (int i = 0; i < sizeSliders.Length; i++)
         {
-            sizeSliders[i].value = effectSizes[i];
+            if (sizeSliders[i] != null)
+            {
+                int capturedIndex = i;
+                sizeSliders[i].onValueChanged.RemoveAllListeners();
+                sizeSliders[i].onValueChanged.AddListener((value) => OnSizeSliderChanged(value, capturedIndex));
+                sizeSliders[i].value = effectSizes[i];
+            }
         }
         
         effectNameText.text = GetEffectName(0);
@@ -48,16 +48,51 @@ public class VFXSelector : MonoBehaviour
 
     public void SelectEffect(int index)
     {
-        currentIndex = index;
-        Camera.main.transform.position = cameraPositions[index].position;
-        Camera.main.transform.rotation = cameraPositions[index].rotation;
+        if (isMoving) return;
+        if (index == currentIndex) return;
 
+        currentIndex = index;
         effectNameText.text = GetEffectName(index);
         
         for (int i = 0; i < sliderGroups.Length; i++)
             sliderGroups[i].SetActive(i == index);
         
-        sizeSliders[currentIndex].value = effectSizes[currentIndex];
+        if (sizeSliders[currentIndex] != null)
+            sizeSliders[currentIndex].value = effectSizes[currentIndex];
+        
+        StartCoroutine(MoveCameraSmoothly(cameraPositions[index]));
+    }
+
+    IEnumerator MoveCameraSmoothly(Transform target)
+    {
+        isMoving = true;
+        Camera cam = Camera.main;
+        
+        Vector3 startPos = cam.transform.position;
+        Quaternion startRot = cam.transform.rotation;
+        
+        float distance = Vector3.Distance(startPos, target.position);
+        float duration = distance / cameraMoveSpeed;
+        duration = Mathf.Clamp(duration, 0.5f, 2f); 
+        
+        float elapsed = 0f;
+        
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / duration;
+            t = Mathf.SmoothStep(0f, 1f, t);
+            
+            cam.transform.position = Vector3.Lerp(startPos, target.position, t);
+            cam.transform.rotation = Quaternion.Slerp(startRot, target.rotation, t);
+            
+            yield return null;
+        }
+        
+        cam.transform.position = target.position;
+        cam.transform.rotation = target.rotation;
+        
+        isMoving = false;
     }
 
     public void OnSizeSliderChanged(float value, int effectIndex)
