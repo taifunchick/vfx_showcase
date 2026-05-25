@@ -13,10 +13,10 @@ public class VFXSelector : MonoBehaviour
     public float cameraMoveSpeed = 5f;
 
     private bool isMoving = false;
-    
     private float[] effectSizes;
     
     public Slider[] sizeSliders;
+    public TextMeshProUGUI[] sliderValueTexts;
 
     private int currentIndex = 0;
 
@@ -32,6 +32,10 @@ public class VFXSelector : MonoBehaviour
                 sizeSliders[i].onValueChanged.RemoveAllListeners();
                 sizeSliders[i].onValueChanged.AddListener((value) => OnSizeSliderChanged(value, capturedIndex));
                 sizeSliders[i].value = effectSizes[i];
+                
+                // Обновляем текстовое значение при старте
+                if (sliderValueTexts[i] != null)
+                    sliderValueTexts[i].text = effectSizes[i].ToString("F2");
             }
         }
         
@@ -98,6 +102,10 @@ public class VFXSelector : MonoBehaviour
     public void OnSizeSliderChanged(float value, int effectIndex)
     {
         effectSizes[effectIndex] = value;
+        
+        // Обновляем текстовое значение слайдера
+        if (sliderValueTexts[effectIndex] != null)
+            sliderValueTexts[effectIndex].text = value.ToString("F2");
         
         if (currentIndex == effectIndex)
         {
