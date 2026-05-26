@@ -33,9 +33,8 @@ public class VFXSelector : MonoBehaviour
                 sizeSliders[i].onValueChanged.AddListener((value) => OnSizeSliderChanged(value, capturedIndex));
                 sizeSliders[i].value = effectSizes[i];
                 
-                // Обновляем текстовое значение при старте
                 if (sliderValueTexts[i] != null)
-                    sliderValueTexts[i].text = effectSizes[i].ToString("F2");
+                    sliderValueTexts[i].text = "Size: " + effectSizes[i].ToString("F2");
             }
         }
         
@@ -103,9 +102,8 @@ public class VFXSelector : MonoBehaviour
     {
         effectSizes[effectIndex] = value;
         
-        // Обновляем текстовое значение слайдера
         if (sliderValueTexts[effectIndex] != null)
-            sliderValueTexts[effectIndex].text = value.ToString("F2");
+            sliderValueTexts[effectIndex].text = "Size: " + value.ToString("F2");
         
         if (currentIndex == effectIndex)
         {
