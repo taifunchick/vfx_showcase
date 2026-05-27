@@ -14,16 +14,23 @@ public class VFXSelector : MonoBehaviour
 
     private bool isMoving = false;
     private float[] effectSizes;
+    private float[] effectRotations; // Массив для хранения значений вращения
     
     public Slider[] sizeSliders;
     public TextMeshProUGUI[] sliderValueTexts;
+    
+    // Новые массивы для слайдера вращения
+    public Slider[] rotationSliders;
+    public TextMeshProUGUI[] rotationValueTexts;
 
     private int currentIndex = 0;
 
     void Start()
     {
         effectSizes = new float[] { 1f, 1f, 1f, 1f };
+        effectRotations = new float[] { 0f, 0f, 0f, 0f }; // Инициализация вращения
         
+        // Настройка слайдеров размера
         for (int i = 0; i < sizeSliders.Length; i++)
         {
             if (sizeSliders[i] != null)
@@ -38,6 +45,21 @@ public class VFXSelector : MonoBehaviour
             }
         }
         
+        // Настройка слайдеров вращения
+        for (int i = 0; i < rotationSliders.Length; i++)
+        {
+            if (rotationSliders[i] != null)
+            {
+                int capturedIndex = i;
+                rotationSliders[i].onValueChanged.RemoveAllListeners();
+                rotationSliders[i].onValueChanged.AddListener((value) => OnRotationSliderChanged(value, capturedIndex));
+                rotationSliders[i].value = effectRotations[i];
+                
+                if (rotationValueTexts[i] != null)
+                    rotationValueTexts[i].text = "Rotation: " + effectRotations[i].ToString("F0") + "°";
+            }
+        }
+        
         effectNameText.text = GetEffectName(0);
         
         for (int i = 0; i < sliderGroups.Length; i++)
@@ -47,6 +69,7 @@ public class VFXSelector : MonoBehaviour
         Camera.main.transform.rotation = cameraPositions[0].rotation;
         
         effectZones[0].transform.localScale = Vector3.one * effectSizes[0];
+        effectZones[0].transform.rotation = Quaternion.Euler(0, effectRotations[0], 0);
     }
 
     public void SelectEffect(int index)
@@ -62,6 +85,9 @@ public class VFXSelector : MonoBehaviour
         
         if (sizeSliders[currentIndex] != null)
             sizeSliders[currentIndex].value = effectSizes[currentIndex];
+        
+        if (rotationSliders[currentIndex] != null)
+            rotationSliders[currentIndex].value = effectRotations[currentIndex];
         
         StartCoroutine(MoveCameraSmoothly(cameraPositions[index]));
     }
@@ -108,6 +134,20 @@ public class VFXSelector : MonoBehaviour
         if (currentIndex == effectIndex)
         {
             effectZones[effectIndex].transform.localScale = Vector3.one * value;
+        }
+    }
+
+    // Новый метод для слайдера вращения
+    public void OnRotationSliderChanged(float value, int effectIndex)
+    {
+        effectRotations[effectIndex] = value;
+        
+        if (rotationValueTexts[effectIndex] != null)
+            rotationValueTexts[effectIndex].text = "Rotation: " + value.ToString("F0") + "°";
+        
+        if (currentIndex == effectIndex)
+        {
+            effectZones[effectIndex].transform.rotation = Quaternion.Euler(0, value, 0);
         }
     }
 
