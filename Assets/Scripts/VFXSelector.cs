@@ -2,93 +2,232 @@ using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
 using System.Collections;
+using System.Collections.Generic;
 
 public class VFXSelector : MonoBehaviour
 {
+    [Header("Камеры и зоны")]
     public Transform[] cameraPositions;
     public GameObject[] effectZones;
     public GameObject[] sliderGroups;
     public TextMeshProUGUI effectNameText;
 
+    [Header("Скорость камеры")]
     public float cameraMoveSpeed = 5f;
 
-    private bool isMoving = false;
+    // Размер
     private float[] effectSizes;
-    private float[] effectRotations; // Массив для хранения значений вращения
-    
     public Slider[] sizeSliders;
-    public TextMeshProUGUI[] sliderValueTexts;
-    
-    // Новые массивы для слайдера вращения
-    public Slider[] rotationSliders;
-    public TextMeshProUGUI[] rotationValueTexts;
+    public TextMeshProUGUI[] sizeValueTexts;
+
+    // Цвет (Hue)
+    private float[] effectHues;
+    public Slider[] colorSliders;
+    public TextMeshProUGUI[] colorValueTexts;
+
+    // Для Mesh: Dissolve и Transparency (индекс эффекта Mesh = 2)
+    private float[] effectDissolve;
+    private float[] effectTransparency;
+    public Slider[] dissolveSliders;      // массив на 4 элемента, заполняем только для Mesh
+    public TextMeshProUGUI[] dissolveValueTexts;
+    public Slider[] transparencySliders;
+    public TextMeshProUGUI[] transparencyValueTexts;
 
     private int currentIndex = 0;
+    private bool isMoving = false;
+    private Dictionary<int, Material> effectMaterials; // кэш материалов для каждого эффекта
 
     void Start()
     {
-        effectSizes = new float[] { 1f, 1f, 1f, 1f };
-        effectRotations = new float[] { 0f, 0f, 0f, 0f }; // Инициализация вращения
-        
-        // Настройка слайдеров размера
+        // Инициализация массивов
+        int n = effectZones.Length; // 4
+        effectSizes = new float[n];
+        effectHues = new float[n];
+        effectDissolve = new float[n];
+        effectTransparency = new float[n];
+        effectMaterials = new Dictionary<int, Material>();
+
+        for (int i = 0; i < n; i++)
+        {
+            effectSizes[i] = 1f;
+            effectHues[i] = 0f; // красный
+            effectDissolve[i] = 0f;
+            effectTransparency[i] = 1f;
+        }
+
+        // Настройка слайдеров размера (общие для всех)
         for (int i = 0; i < sizeSliders.Length; i++)
         {
-            if (sizeSliders[i] != null)
-            {
-                int capturedIndex = i;
-                sizeSliders[i].onValueChanged.RemoveAllListeners();
-                sizeSliders[i].onValueChanged.AddListener((value) => OnSizeSliderChanged(value, capturedIndex));
-                sizeSliders[i].value = effectSizes[i];
-                
-                if (sliderValueTexts[i] != null)
-                    sliderValueTexts[i].text = "Size: " + effectSizes[i].ToString("F2");
-            }
+            if (sizeSliders[i] == null) continue;
+            int idx = i;
+            sizeSliders[i].minValue = 0.2f;
+            sizeSliders[i].maxValue = 3f;
+            sizeSliders[i].onValueChanged.RemoveAllListeners();
+            sizeSliders[i].onValueChanged.AddListener((v) => OnSizeChanged(v, idx));
+            sizeSliders[i].value = effectSizes[i];
+            if (sizeValueTexts[i]) sizeValueTexts[i].text = $"Size: {effectSizes[i]:F2}";
         }
-        
-        // Настройка слайдеров вращения
-        for (int i = 0; i < rotationSliders.Length; i++)
+
+        // Настройка слайдеров цвета (Hue)
+        for (int i = 0; i < colorSliders.Length; i++)
         {
-            if (rotationSliders[i] != null)
+            if (colorSliders[i] == null) continue;
+            int idx = i;
+            colorSliders[i].minValue = 0f;
+            colorSliders[i].maxValue = 1f;
+            colorSliders[i].onValueChanged.RemoveAllListeners();
+            colorSliders[i].onValueChanged.AddListener((v) => OnColorChanged(v, idx));
+            colorSliders[i].value = effectHues[i];
+            if (colorValueTexts[i]) colorValueTexts[i].text = $"Color: {HueToName(effectHues[i])}";
+        }
+
+        // Настройка dissolve и transparency (только для Mesh – индекс 2)
+        // Для простоты заполним все 4 элемента, но активны будут только для Mesh через sliderGroups
+        for (int i = 0; i < dissolveSliders.Length; i++)
+        {
+            if (dissolveSliders[i] != null)
             {
-                int capturedIndex = i;
-                rotationSliders[i].onValueChanged.RemoveAllListeners();
-                rotationSliders[i].onValueChanged.AddListener((value) => OnRotationSliderChanged(value, capturedIndex));
-                rotationSliders[i].value = effectRotations[i];
-                
-                if (rotationValueTexts[i] != null)
-                    rotationValueTexts[i].text = "Rotation: " + effectRotations[i].ToString("F0") + "°";
+                int idx = i;
+                dissolveSliders[i].minValue = 0f;
+                dissolveSliders[i].maxValue = 1f;
+                dissolveSliders[i].onValueChanged.RemoveAllListeners();
+                dissolveSliders[i].onValueChanged.AddListener((v) => OnDissolveChanged(v, idx));
+                dissolveSliders[i].value = effectDissolve[i];
+                if (dissolveValueTexts[i]) dissolveValueTexts[i].text = $"Dissolve: {effectDissolve[i]:F2}";
+            }
+            if (transparencySliders[i] != null)
+            {
+                int idx = i;
+                transparencySliders[i].minValue = 0f;
+                transparencySliders[i].maxValue = 1f;
+                transparencySliders[i].onValueChanged.RemoveAllListeners();
+                transparencySliders[i].onValueChanged.AddListener((v) => OnTransparencyChanged(v, idx));
+                transparencySliders[i].value = effectTransparency[i];
+                if (transparencyValueTexts[i]) transparencyValueTexts[i].text = $"Alpha: {effectTransparency[i]:F2}";
             }
         }
-        
+
+        // Запоминаем материалы для каждого эффекта (чтобы менять цвет и dissolve)
+        for (int i = 0; i < n; i++)
+        {
+            Material foundMat = null;
+            
+            // Сначала ищем ParticleSystemRenderer
+            var psRenderer = effectZones[i].GetComponentInChildren<ParticleSystemRenderer>();
+            if (psRenderer != null)
+            {
+                foundMat = psRenderer.material;
+                Debug.Log($"Зона {i} ({effectZones[i].name}) нашла ParticleSystemRenderer материал: {foundMat.name}");
+            }
+            else
+            {
+                // Если нет, ищем MeshRenderer
+                var meshRenderer = effectZones[i].GetComponentInChildren<MeshRenderer>();
+                if (meshRenderer != null)
+                {
+                    foundMat = meshRenderer.material;
+                    Debug.Log($"Зона {i} ({effectZones[i].name}) нашла MeshRenderer материал: {foundMat.name}");
+                }
+            }
+            
+            if (foundMat != null)
+                effectMaterials[i] = foundMat;
+            else
+                Debug.LogWarning($"Зона {i} ({effectZones[i].name}) не нашла ни ParticleSystemRenderer, ни MeshRenderer!");
+        }
+
+        // Устанавливаем начальное состояние UI
         effectNameText.text = GetEffectName(0);
-        
         for (int i = 0; i < sliderGroups.Length; i++)
             sliderGroups[i].SetActive(i == 0);
-        
+
         Camera.main.transform.position = cameraPositions[0].position;
         Camera.main.transform.rotation = cameraPositions[0].rotation;
-        
-        effectZones[0].transform.localScale = Vector3.one * effectSizes[0];
-        effectZones[0].transform.rotation = Quaternion.Euler(0, effectRotations[0], 0);
+
+        // Применяем начальные параметры
+        ApplyAllParameters(0);
     }
 
+    void ApplyAllParameters(int index)
+    {
+        // Масштаб
+        effectZones[index].transform.localScale = Vector3.one * effectSizes[index];
+        // Цвет
+        if (effectMaterials.ContainsKey(index) && effectMaterials[index] != null)
+        {
+            Color col = Color.HSVToRGB(effectHues[index], 1f, 1f);
+            effectMaterials[index].color = col;
+        }
+        // Dissolve и Transparency (только если материал их поддерживает)
+        if (effectMaterials.ContainsKey(index) && effectMaterials[index] != null)
+        {
+            effectMaterials[index].SetFloat("_DissolveAmount", effectDissolve[index]);
+            effectMaterials[index].SetFloat("_DissolveThreshold", effectDissolve[index]); // для разных шейдеров
+            // Прозрачность: устанавливаем альфа-канал, но нужно, чтобы материал был прозрачным
+            Color col = effectMaterials[index].color;
+            col.a = effectTransparency[index];
+            effectMaterials[index].color = col;
+        }
+    }
+
+    // ----- Обработчики слайдеров -----
+    public void OnSizeChanged(float val, int idx)
+    {
+        effectSizes[idx] = val;
+        if (sizeValueTexts[idx]) sizeValueTexts[idx].text = $"Size: {val:F2}";
+        if (currentIndex == idx) effectZones[idx].transform.localScale = Vector3.one * val;
+    }
+
+    public void OnColorChanged(float hue, int idx)
+    {
+        effectHues[idx] = hue;
+        string name = HueToName(hue);
+        if (colorValueTexts[idx]) colorValueTexts[idx].text = $"Color: {name}";
+        if (currentIndex == idx && effectMaterials.ContainsKey(idx) && effectMaterials[idx] != null)
+        {
+            effectMaterials[idx].color = Color.HSVToRGB(hue, 1f, 1f);
+        }
+    }
+
+    public void OnDissolveChanged(float val, int idx)
+    {
+        effectDissolve[idx] = val;
+        if (dissolveValueTexts[idx]) dissolveValueTexts[idx].text = $"Dissolve: {val:F2}";
+        if (currentIndex == idx && effectMaterials.ContainsKey(idx) && effectMaterials[idx] != null)
+        {
+            effectMaterials[idx].SetFloat("_DissolveAmount", val);
+            effectMaterials[idx].SetFloat("_DissolveThreshold", val);
+        }
+    }
+
+    public void OnTransparencyChanged(float val, int idx)
+    {
+        effectTransparency[idx] = val;
+        if (transparencyValueTexts[idx]) transparencyValueTexts[idx].text = $"Alpha: {val:F2}";
+        if (currentIndex == idx && effectMaterials.ContainsKey(idx) && effectMaterials[idx] != null)
+        {
+            Color c = effectMaterials[idx].color;
+            c.a = val;
+            effectMaterials[idx].color = c;
+        }
+    }
+
+    // ----- Переключение эффекта -----
     public void SelectEffect(int index)
     {
-        if (isMoving) return;
-        if (index == currentIndex) return;
-
+        if (isMoving || index == currentIndex) return;
         currentIndex = index;
         effectNameText.text = GetEffectName(index);
-        
+
         for (int i = 0; i < sliderGroups.Length; i++)
             sliderGroups[i].SetActive(i == index);
-        
-        if (sizeSliders[currentIndex] != null)
-            sizeSliders[currentIndex].value = effectSizes[currentIndex];
-        
-        if (rotationSliders[currentIndex] != null)
-            rotationSliders[currentIndex].value = effectRotations[currentIndex];
-        
+
+        // Обновляем значения всех слайдеров, чтобы они показывали текущие параметры эффекта
+        if (sizeSliders[currentIndex] != null) sizeSliders[currentIndex].value = effectSizes[currentIndex];
+        if (colorSliders[currentIndex] != null) colorSliders[currentIndex].value = effectHues[currentIndex];
+        if (dissolveSliders[currentIndex] != null) dissolveSliders[currentIndex].value = effectDissolve[currentIndex];
+        if (transparencySliders[currentIndex] != null) transparencySliders[currentIndex].value = effectTransparency[currentIndex];
+
         StartCoroutine(MoveCameraSmoothly(cameraPositions[index]));
     }
 
@@ -96,63 +235,35 @@ public class VFXSelector : MonoBehaviour
     {
         isMoving = true;
         Camera cam = Camera.main;
-        
         Vector3 startPos = cam.transform.position;
         Quaternion startRot = cam.transform.rotation;
-        
         float distance = Vector3.Distance(startPos, target.position);
-        float duration = distance / cameraMoveSpeed;
-        duration = Mathf.Clamp(duration, 0.5f, 2f); 
-        
+        float duration = Mathf.Clamp(distance / cameraMoveSpeed, 0.5f, 2f);
         float elapsed = 0f;
-        
         while (elapsed < duration)
         {
             elapsed += Time.deltaTime;
             float t = elapsed / duration;
             t = Mathf.SmoothStep(0f, 1f, t);
-            
             cam.transform.position = Vector3.Lerp(startPos, target.position, t);
             cam.transform.rotation = Quaternion.Slerp(startRot, target.rotation, t);
-            
             yield return null;
         }
-        
         cam.transform.position = target.position;
         cam.transform.rotation = target.rotation;
-        
         isMoving = false;
     }
 
-    public void OnSizeSliderChanged(float value, int effectIndex)
-    {
-        effectSizes[effectIndex] = value;
-        
-        if (sliderValueTexts[effectIndex] != null)
-            sliderValueTexts[effectIndex].text = "Size: " + value.ToString("F2");
-        
-        if (currentIndex == effectIndex)
-        {
-            effectZones[effectIndex].transform.localScale = Vector3.one * value;
-        }
-    }
+    private string GetEffectName(int idx) => new[] { "Particle", "Flipbook", "Mesh", "Shader" }[idx];
 
-    // Новый метод для слайдера вращения
-    public void OnRotationSliderChanged(float value, int effectIndex)
+    private string HueToName(float hue)
     {
-        effectRotations[effectIndex] = value;
-        
-        if (rotationValueTexts[effectIndex] != null)
-            rotationValueTexts[effectIndex].text = "Rotation: " + value.ToString("F0") + "°";
-        
-        if (currentIndex == effectIndex)
-        {
-            effectZones[effectIndex].transform.rotation = Quaternion.Euler(0, value, 0);
-        }
-    }
-
-    private string GetEffectName(int idx)
-    {
-        return new[] { "Particle", "Flipbook", "Mesh", "Shader" }[idx];
+        if (hue < 0.05f) return "Red";
+        if (hue < 0.15f) return "Orange";
+        if (hue < 0.35f) return "Yellow";
+        if (hue < 0.5f) return "Green";
+        if (hue < 0.7f) return "Cyan";
+        if (hue < 0.85f) return "Blue";
+        return "Purple";
     }
 }
