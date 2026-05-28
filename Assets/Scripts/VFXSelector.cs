@@ -7,30 +7,26 @@ using System.Collections.Generic;
 public class VFXSelector : MonoBehaviour
 {
     [Header("Камеры и зоны")]
-    public Transform[] cameraPositions;      // 5 позиций
-    public GameObject[] effectZones;         // 5 зон
-    public GameObject[] sliderGroups;        // 5 панелей со слайдерами
+    public Transform[] cameraPositions;
+    public GameObject[] effectZones;
+    public GameObject[] sliderGroups;
     public TextMeshProUGUI effectNameText;
 
     [Header("Скорость камеры")]
     public float cameraMoveSpeed = 5f;
 
-    // Размер
     private float[] effectSizes;
     public Slider[] sizeSliders;
     public TextMeshProUGUI[] sizeValueTexts;
 
-    // Цвет (Hue)
     private float[] effectHues;
     public Slider[] colorSliders;
     public TextMeshProUGUI[] colorValueTexts;
 
-    // Скорость (для Combined и любых других эффектов с ParticleSystem)
     private float[] effectSpeeds;
     public Slider[] speedSliders;
     public TextMeshProUGUI[] speedValueTexts;
 
-    // Для Mesh: Dissolve и Transparency (индекс эффекта Mesh = 2)
     private float[] effectDissolve;
     private float[] effectTransparency;
     public Slider[] dissolveSliders;
@@ -41,7 +37,7 @@ public class VFXSelector : MonoBehaviour
     private int currentIndex = 0;
     private bool isMoving = false;
     private Dictionary<int, Material> effectMaterials;
-    private Dictionary<int, ParticleSystem> effectParticleSystems; // для управления скоростью и цветом
+    private Dictionary<int, ParticleSystem> effectParticleSystems;
 
     void Start()
     {
@@ -63,7 +59,6 @@ public class VFXSelector : MonoBehaviour
             effectTransparency[i] = 1f;
         }
 
-        // Настройка слайдеров размера
         for (int i = 0; i < sizeSliders.Length; i++)
         {
             if (sizeSliders[i] == null) continue;
@@ -76,7 +71,6 @@ public class VFXSelector : MonoBehaviour
             if (sizeValueTexts[i]) sizeValueTexts[i].text = $"Size: {effectSizes[i]:F2}";
         }
 
-        // Настройка слайдеров цвета (Hue)
         for (int i = 0; i < colorSliders.Length; i++)
         {
             if (colorSliders[i] == null) continue;
@@ -89,7 +83,6 @@ public class VFXSelector : MonoBehaviour
             if (colorValueTexts[i]) colorValueTexts[i].text = $"Color: {HueToName(effectHues[i])}";
         }
 
-        // Настройка слайдеров скорости
         for (int i = 0; i < speedSliders.Length; i++)
         {
             if (speedSliders[i] == null) continue;
@@ -102,7 +95,6 @@ public class VFXSelector : MonoBehaviour
             if (speedValueTexts[i]) speedValueTexts[i].text = $"Speed: {effectSpeeds[i]:F2}";
         }
 
-        // Настройка dissolve и transparency (только для Mesh – индекс 2, но массив на 5)
         for (int i = 0; i < dissolveSliders.Length; i++)
         {
             if (dissolveSliders[i] != null)
@@ -127,38 +119,23 @@ public class VFXSelector : MonoBehaviour
             }
         }
 
-        // Поиск материалов и ParticleSystem
         for (int i = 0; i < n; i++)
         {
-            // ParticleSystem для скорости и цвета
             var ps = effectZones[i].GetComponentInChildren<ParticleSystem>();
             if (ps != null) effectParticleSystems[i] = ps;
 
-            // Поиск материала: сначала MeshRenderer, потом ParticleSystemRenderer
             Material mat = null;
             var meshRend = effectZones[i].GetComponentInChildren<MeshRenderer>();
             if (meshRend != null)
-            {
                 mat = meshRend.material;
-                Debug.Log($"Зона {i} ({effectZones[i].name}) нашла MeshRenderer материал: {mat.name}");
-            }
             else
             {
                 var psRend = effectZones[i].GetComponentInChildren<ParticleSystemRenderer>();
-                if (psRend != null)
-                {
-                    mat = psRend.material;
-                    Debug.Log($"Зона {i} ({effectZones[i].name}) нашла ParticleSystemRenderer материал: {mat.name}");
-                }
-                else
-                {
-                    Debug.LogWarning($"Зона {i} ({effectZones[i].name}) не имеет ни MeshRenderer, ни ParticleSystemRenderer");
-                }
+                if (psRend != null) mat = psRend.material;
             }
             if (mat != null) effectMaterials[i] = mat;
         }
 
-        // Начальное состояние UI
         effectNameText.text = GetEffectName(0);
         for (int i = 0; i < sliderGroups.Length; i++)
             sliderGroups[i].SetActive(i == 0);
@@ -169,45 +146,30 @@ public class VFXSelector : MonoBehaviour
         ApplyAllParameters(0);
     }
 
-    // Применяет все параметры (размер, цвет, скорость, dissolve, прозрачность) к указанному эффекту
     void ApplyAllParameters(int index)
     {
-        // Размер
         effectZones[index].transform.localScale = Vector3.one * effectSizes[index];
 
-        // Цвет (через специальный метод, учитывающий ParticleSystem и _TintColor)
         Color col = Color.HSVToRGB(effectHues[index], 1f, 1f);
         ApplyColorToEffect(index, col);
 
-        // Скорость симуляции
         if (effectParticleSystems.ContainsKey(index) && effectParticleSystems[index] != null)
         {
             var main = effectParticleSystems[index].main;
             main.simulationSpeed = effectSpeeds[index];
         }
 
-        // Dissolve и прозрачность (если материал поддерживает)
-        if (effectMaterials.ContainsKey(index) && effectMaterials[index] != null)
-        {
-            effectMaterials[index].SetFloat("_DissolveAmount", effectDissolve[index]);
-            effectMaterials[index].SetFloat("_DissolveThreshold", effectDissolve[index]);
-            Color c = effectMaterials[index].color;
-            c.a = effectTransparency[index];
-            effectMaterials[index].color = c;
-        }
+        ApplyDissolveToEffect(index, effectDissolve[index]);
+        ApplyTransparencyToEffect(index, effectTransparency[index]);
     }
 
-    // Универсальный метод изменения цвета для любых эффектов (частицы + меши)
     private void ApplyColorToEffect(int index, Color color)
     {
-        // 1. Если есть ParticleSystem, меняем startColor (работает всегда)
         if (effectParticleSystems.ContainsKey(index) && effectParticleSystems[index] != null)
         {
             var main = effectParticleSystems[index].main;
             main.startColor = color;
         }
-        
-        // 2. Если есть материал, пробуем стандартный Color, а также _TintColor (для шейдера Mobile/Particles/Additive)
         if (effectMaterials.ContainsKey(index) && effectMaterials[index] != null)
         {
             var mat = effectMaterials[index];
@@ -219,7 +181,53 @@ public class VFXSelector : MonoBehaviour
         }
     }
 
-    // ----- Обработчики слайдеров -----
+    private void ApplyDissolveToEffect(int index, float value)
+    {
+        if (effectMaterials.ContainsKey(index) && effectMaterials[index] != null)
+        {
+            var mat = effectMaterials[index];
+            if (mat.HasProperty("_DissolveAmount"))
+                mat.SetFloat("_DissolveAmount", value);
+            else if (mat.HasProperty("_DissolveThreshold"))
+                mat.SetFloat("_DissolveThreshold", value);
+            else if (mat.HasProperty("_SliceAmount"))
+                mat.SetFloat("_SliceAmount", value);
+            else if (mat.HasProperty("Dissolve"))
+                mat.SetFloat("Dissolve", value);
+            else
+            {
+                if (!dissolveWarningShown.ContainsKey(index))
+                {
+                    Debug.LogWarning($"Материал {mat.name} не имеет параметра dissolve (пробовал: _DissolveAmount, _DissolveThreshold, _SliceAmount, Dissolve)");
+                    dissolveWarningShown[index] = true;
+                }
+            }
+        }
+    }
+    private Dictionary<int, bool> dissolveWarningShown = new Dictionary<int, bool>();
+
+    private void ApplyTransparencyToEffect(int index, float value)
+    {
+        if (effectMaterials.ContainsKey(index) && effectMaterials[index] != null)
+        {
+            var mat = effectMaterials[index];
+            if (mat.HasProperty("_Transparency"))
+                mat.SetFloat("_Transparency", value);
+            else if (mat.HasProperty("_Alpha"))
+                mat.SetFloat("_Alpha", value);
+            else if (mat.HasProperty("Transparency"))
+                mat.SetFloat("Transparency", value);
+            else if (mat.HasProperty("alpha"))
+                mat.SetFloat("alpha", value);
+            else
+            {
+                Color c = mat.color;
+                c.a = value;
+                mat.color = c;
+            }
+        }
+    }
+
     public void OnSizeChanged(float val, int idx)
     {
         effectSizes[idx] = val;
@@ -230,13 +238,9 @@ public class VFXSelector : MonoBehaviour
     public void OnColorChanged(float hue, int idx)
     {
         effectHues[idx] = hue;
-        string name = HueToName(hue);
-        if (colorValueTexts[idx]) colorValueTexts[idx].text = $"Color: {name}";
+        if (colorValueTexts[idx]) colorValueTexts[idx].text = $"Color: {HueToName(hue)}";
         if (currentIndex == idx)
-        {
-            Color col = Color.HSVToRGB(hue, 1f, 1f);
-            ApplyColorToEffect(idx, col);
-        }
+            ApplyColorToEffect(idx, Color.HSVToRGB(hue, 1f, 1f));
     }
 
     public void OnSpeedChanged(float val, int idx)
@@ -254,26 +258,18 @@ public class VFXSelector : MonoBehaviour
     {
         effectDissolve[idx] = val;
         if (dissolveValueTexts[idx]) dissolveValueTexts[idx].text = $"Dissolve: {val:F2}";
-        if (currentIndex == idx && effectMaterials.ContainsKey(idx) && effectMaterials[idx] != null)
-        {
-            effectMaterials[idx].SetFloat("_DissolveAmount", val);
-            effectMaterials[idx].SetFloat("_DissolveThreshold", val);
-        }
+        if (currentIndex == idx)
+            ApplyDissolveToEffect(idx, val);
     }
 
     public void OnTransparencyChanged(float val, int idx)
     {
         effectTransparency[idx] = val;
         if (transparencyValueTexts[idx]) transparencyValueTexts[idx].text = $"Alpha: {val:F2}";
-        if (currentIndex == idx && effectMaterials.ContainsKey(idx) && effectMaterials[idx] != null)
-        {
-            Color c = effectMaterials[idx].color;
-            c.a = val;
-            effectMaterials[idx].color = c;
-        }
+        if (currentIndex == idx)
+            ApplyTransparencyToEffect(idx, val);
     }
 
-    // ----- Переключение эффекта -----
     public void SelectEffect(int index)
     {
         if (isMoving || index == currentIndex) return;
